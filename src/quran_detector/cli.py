@@ -24,6 +24,7 @@ from typing import Any, TextIO
 
 from .corpus import Corpus
 from .detector import BALANCED, HIGH_PRECISION, QuranDetector
+from .metadata import QuranMetadata
 from .models import SCHEMA_VERSION, DetectionResult, QuranMatch, Status
 
 STATUS_ORDER = [Status.VERIFIED, Status.AMBIGUOUS, Status.ALTERED, Status.SPLICED, Status.CANDIDATE]
@@ -83,6 +84,10 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> int:
     ap.add_argument("--uthmani", help="Tanzil Uthmani text, same format (optional)")
     ap.add_argument("--mode", choices=["high_precision", "balanced"], default="high_precision")
     ap.add_argument("--allow-partial-corpus", action="store_true")
+    ap.add_argument(
+        "--metadata",
+        help="quran_meta.json (see scripts/import_metadata.py): adds surah names, page, juz to each location",
+    )
     ap.add_argument("--format", choices=["json", "jsonl", "text"], default="json")
     ap.add_argument(
         "--min-status",
@@ -97,7 +102,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> int:
     args = ap.parse_args(argv)
 
     corpus = Corpus.from_tanzil(args.simple, args.uthmani, require_complete=not args.allow_partial_corpus)
-    det = QuranDetector(corpus, HIGH_PRECISION if args.mode == "high_precision" else BALANCED)
+    metadata = QuranMetadata.load(args.metadata) if args.metadata else None
+    det = QuranDetector(corpus, HIGH_PRECISION if args.mode == "high_precision" else BALANCED, metadata)
     min_status = Status(args.min_status) if args.min_status else None
 
     if args.cmd == "detect":

@@ -15,10 +15,15 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+sys.path.insert(0, str(ROOT / "src"))
+
+from quran_detector.tanzil import default_data_dir, read_tanzil  # noqa: E402
+
+DATA = default_data_dir()
 FIXTURES = ROOT / "tests" / "fixtures"
 
 # (surah, first ayah, last ayah) inclusive
+
 SELECTION = [
     (1, 1, 7),
     (2, 153, 156),
@@ -37,15 +42,7 @@ HEADER = (
 
 
 def _rows(path: Path) -> dict[tuple[int, int], str]:
-    out: dict[tuple[int, int], str] = {}
-    with open(path, encoding="utf-8-sig") as fh:
-        for line in fh:
-            line = line.rstrip("\n\r")
-            if not line.strip() or line.startswith("#"):
-                continue
-            s, a, text = line.split("|", 2)
-            out[(int(s), int(a))] = text
-    return out
+    return {(s, a): t for s, a, t in read_tanzil(path)}
 
 
 def build(source: dict[tuple[int, int], str]) -> list[str]:

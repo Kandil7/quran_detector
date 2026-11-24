@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from evaluation.gold import load_gold  # noqa: E402
 from evaluation.run_eval import evaluate, predict  # noqa: E402
 from quran_detector import HIGH_PRECISION, Corpus, QuranDetector  # noqa: E402
+from quran_detector.tanzil import default_data_dir  # noqa: E402
 
 GRID = {
     "min_words": [4, 5, 6],
@@ -75,7 +76,7 @@ def choose(rows: list[dict], baseline: dict, min_precision: float = 0.99) -> dic
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--simple", type=Path, default=ROOT / "data" / "quran-simple.txt")
+    ap.add_argument("--simple", type=Path, default=default_data_dir() / "quran-simple.txt")
     ap.add_argument("--data", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)

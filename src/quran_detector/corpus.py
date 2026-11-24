@@ -13,14 +13,13 @@ verbatim, as Tanzil's terms require; normalized forms are derived in memory.
 from __future__ import annotations
 
 import hashlib
-import os
-import pickle
-import tempfile
 from array import array
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .store import StoreError, read_store, write_store
+from .tanzil import read_tanzil
 from .tokenizer import WORD, tokenize
 from .uthmani import ACCEPT_COST, REVIEWED_COST, align_ayah, uthmani_keys
 
@@ -28,7 +27,7 @@ SURAH_BREAK = -2
 TOTAL_AYAHS = 6236
 TOTAL_SURAHS = 114
 # Bump when the layout of Corpus changes, so old cache files are ignored.
-CACHE_VERSION = 7
+CACHE_VERSION = 8  # layout of the store (SQLite), see store.py
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,20 +42,6 @@ class Ayah:
     @property
     def word_count(self) -> int:
         return self.end - self.start
-
-
-def _read_tanzil(path: Path) -> list[tuple[int, int, str]]:
-    rows = []
-    with open(path, encoding="utf-8-sig") as fh:
-        for line in fh:
-            line = line.rstrip("\n\r")
-            if not line.strip() or line.startswith("#"):
-                continue
-            parts = line.split("|", 2)
-            if len(parts) != 3:
-                raise ValueError(f"{path}: unexpected line format: {line[:60]!r}")
-            rows.append((int(parts[0]), int(parts[1]), parts[2]))
-    return rows
 
 
 def _sha256(path: Path) -> str:
@@ -242,35 +227,76 @@ class Corpus:
     ) -> Corpus:
         """Build a corpus from Tanzil files.
 
-        With `cache_dir`, the built corpus is pickled there under a key that is the
-        SHA-256 of the input bytes (and the cache version), so editing or replacing
-        a Tanzil file gives a new key and the old cache is never used. Keep the
-        cache directory private: loading a pickle runs code, so only load files
-        this library wrote.
+        With `cache_dir`, the built corpus is stored there as a SQLite file under a
+        key that is the SHA-256 of the input bytes (and the cache version). Editing a
+        Tanzil file gives a new key, so the old store is never used. A store that
+        cannot be read is rebuilt. The store is plain data (no pickle), so loading it
+        runs no code.
         """
         if cache_dir is None:
             return cls._build_from_tanzil(simple_path, uthmani_path, require_complete)
         key = _cache_key(simple_path, uthmani_path, require_complete)
-        path = Path(cache_dir) / f"corpus-{key}.pkl"
-        if path.exists():
-            try:
-                with open(path, "rb") as fh:
-                    stored_key, corpus = pickle.load(fh)
-                if stored_key == key and isinstance(corpus, Corpus):
-                    return corpus
-            except Exception:  # corrupt or unreadable cache: rebuild below
-                pass
-        corpus = cls._build_from_tanzil(simple_path, uthmani_path, require_complete)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        path = Path(cache_dir) / f"corpus-{key}.sqlite"
         try:
-            with os.fdopen(fd, "wb") as fh:
-                pickle.dump((key, corpus), fh, protocol=pickle.HIGHEST_PROTOCOL)
-            os.replace(tmp, path)
-        finally:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+            return cls._from_parts(read_store(path, str(CACHE_VERSION), key))
+        except (StoreError, KeyError, TypeError, ValueError):
+            pass  # missing, stale or corrupt: rebuild below
+        corpus = cls._build_from_tanzil(simple_path, uthmani_path, require_complete)
+        write_store(path, {"cache_version": str(CACHE_VERSION), "cache_key": key}, corpus.to_parts())
         return corpus
+
+    def to_parts(self) -> dict[str, Any]:
+        """The built corpus as plain values (JSON-able, or arrays). The indexes are
+        not included: `_from_parts` rebuilds them, which is cheap."""
+        return {
+            "source": self.source,
+            "vocab": self.vocab,
+            "vocab_aggressive": self.vocab_aggressive,
+            "vocab_strict": self.vocab_strict,
+            "raw_words": self.raw_words,
+            "stream": self.stream,
+            "pos_ayah": self.pos_ayah,
+            "pos_word": self.pos_word,
+            "ayahs": [asdict(a) for a in self.ayahs],
+            "ayah_index": [[s, a, i] for (s, a), i in self.ayah_index.items()],
+            "surah_ayah_count": {str(k): v for k, v in self.surah_ayah_count.items()},
+            "has_uthmani": self.has_uthmani,
+            "uthmani_map": {k: list(v) for k, v in self.uthmani_map.items()},
+            "block_text": self.block_text,
+            "pos_block": self.pos_block,
+            "uthmani_suspicious": self.uthmani_suspicious,
+            "uthmani_reviewed": self.uthmani_reviewed,
+            "uthmani_collisions": self.uthmani_collisions,
+            "uthmani_reviewed_conflicts": self.uthmani_reviewed_conflicts,
+        }
+
+    @classmethod
+    def _from_parts(cls, parts: dict[str, Any]) -> Corpus:
+        """Rebuild a corpus from `to_parts()` output (see store.read_store)."""
+        obj = cls.__new__(cls)
+        obj.source = dict(parts["source"])
+        obj.vocab = dict(parts["vocab"])
+        obj.vocab_aggressive = list(parts["vocab_aggressive"])
+        obj.vocab_strict = list(parts["vocab_strict"])
+        obj.raw_words = list(parts["raw_words"])
+        obj.stream = parts["stream"]
+        obj.pos_ayah = parts["pos_ayah"]
+        obj.pos_word = parts["pos_word"]
+        obj.ayahs = [Ayah(**a) for a in parts["ayahs"]]
+        obj.ayah_index = {(s, a): i for s, a, i in parts["ayah_index"]}
+        obj.surah_ayah_count = {int(k): v for k, v in parts["surah_ayah_count"].items()}
+        obj.has_uthmani = bool(parts["has_uthmani"])
+        obj.uthmani_map = {k: tuple(v) for k, v in parts["uthmani_map"].items()}
+        obj.block_text = list(parts["block_text"])
+        obj.pos_block = parts["pos_block"]
+        obj.uthmani_suspicious = list(parts["uthmani_suspicious"])
+        obj.uthmani_reviewed = list(parts["uthmani_reviewed"])
+        obj.uthmani_collisions = int(parts["uthmani_collisions"])
+        obj.uthmani_reviewed_conflicts = int(parts["uthmani_reviewed_conflicts"])
+        if len(obj.pos_block) != len(obj.stream) or len(obj.pos_ayah) != len(obj.stream):
+            raise ValueError("array lengths disagree")
+        obj._build_index()
+        return obj
 
     @classmethod
     def _build_from_tanzil(
@@ -280,12 +306,12 @@ class Corpus:
         require_complete: bool,
     ) -> Corpus:
         simple_path = Path(simple_path)
-        rows = _read_tanzil(simple_path)
+        rows = read_tanzil(simple_path)
         source = {"simple_file": simple_path.name, "simple_sha256": _sha256(simple_path)}
         uthmani = None
         if uthmani_path:
             uthmani_path = Path(uthmani_path)
-            u_rows = _read_tanzil(uthmani_path)
+            u_rows = read_tanzil(uthmani_path)
             if [(s, a) for s, a, _ in u_rows] != [(s, a) for s, a, _ in rows]:
                 raise ValueError("Uthmani and Simple files do not have the same ayah list")
             uthmani = {(s, a): t for s, a, t in u_rows}

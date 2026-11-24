@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "4"
+      "const": "5"
     },
     "matches": {
       "type": "array",
@@ -146,7 +146,8 @@
         "citation_correct",
         "spliced_with",
         "diacritics_ok",
-        "script"
+        "script",
+        "location_meta"
       ],
       "additionalProperties": false,
       "properties": {
@@ -243,6 +244,57 @@
             "uthmani"
           ],
           "description": "uthmani: reference_uthmani holds the matched Uthmani words"
+        },
+        "location_meta": {
+          "type": "array",
+          "description": "One entry per location, in the same order as `locations`. Empty unless a metadata file was given.",
+          "items": {
+            "$ref": "#/$defs/location_meta"
+          }
+        }
+      }
+    },
+    "location_meta": {
+      "type": "object",
+      "required": [
+        "surah_name_ar",
+        "surah_name_en",
+        "revelation_place",
+        "page_start",
+        "page_end",
+        "juz_start",
+        "juz_end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "surah_name_ar": {
+          "type": "string"
+        },
+        "surah_name_en": {
+          "type": "string"
+        },
+        "revelation_place": {
+          "type": "string"
+        },
+        "page_start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 604
+        },
+        "page_end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 604
+        },
+        "juz_start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "juz_end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
         }
       }
     }

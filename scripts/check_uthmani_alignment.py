@@ -22,24 +22,19 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from quran_detector.normalizer import Level, normalize  # noqa: E402
+from quran_detector.tanzil import default_data_dir, read_tanzil  # noqa: E402
 from quran_detector.tokenizer import WORD, tokenize  # noqa: E402
 from quran_detector.uthmani import align_ayah, uthmani_keys  # noqa: E402
 
 
 def read_rows(path: Path) -> dict[tuple[int, int], str]:
-    out = {}
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        if not line or line.startswith("#"):
-            continue
-        s, a, t = line.split("|", 2)
-        out[(int(s), int(a))] = t
-    return out
+    return {(s, a): t for s, a, t in read_tanzil(path)}
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    simple_p = Path(argv[0]) if argv else ROOT / "data" / "quran-simple.txt"
-    uth_p = Path(argv[1]) if len(argv) > 1 else ROOT / "data" / "quran-uthmani.txt"
+    simple_p = Path(argv[0]) if argv else default_data_dir() / "quran-simple.txt"
+    uth_p = Path(argv[1]) if len(argv) > 1 else default_data_dir() / "quran-uthmani.txt"
     for p in (simple_p, uth_p):
         if not p.exists():
             print(f"STOP: {p} not found. Download the Tanzil texts first.", file=sys.stderr)

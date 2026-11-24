@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any
 
 # Version of the to_dict() output layout. Bump when a field is added, removed or renamed.
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 
 
 class Status(str, Enum):
@@ -61,6 +61,9 @@ class QuranMatch:
     # "simple": matched on the Imlaei text. "uthmani": at least one input word was an
     # Uthmani spelling; reference_uthmani then holds the matched Uthmani words.
     script: str = "simple"
+    # Per location (same order as `locations`): surah name, revelation place, page and
+    # juz range. Filled only when a metadata file was given to the detector.
+    location_meta: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def surah(self) -> int:

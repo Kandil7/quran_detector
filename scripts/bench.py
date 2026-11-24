@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from quran_detector import Corpus, QuranDetector  # noqa: E402
+from quran_detector.tanzil import default_data_dir  # noqa: E402
 
 SEED = 1
 QUOTES = 10
@@ -90,7 +91,7 @@ def pct(values: list[float], q: float) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("path", nargs="?", default=str(ROOT / "data" / "quran-simple.txt"))
+    ap.add_argument("path", nargs="?", default=str(default_data_dir() / "quran-simple.txt"))
     ap.add_argument("--runs", type=int, default=50)
     args = ap.parse_args(argv)
 

@@ -34,7 +34,7 @@ def test_second_load_comes_from_cache(tmp_path, builds):
     second = Corpus.from_tanzil(FIXTURE, require_complete=False, cache_dir=tmp_path)
     assert len(builds) == 1
     assert len(first) == len(second) and first.stream == second.stream
-    assert len(list(tmp_path.glob("corpus-*.pkl"))) == 1
+    assert len(list(tmp_path.glob("corpus-*.sqlite"))) == 1
 
 
 def test_changed_file_invalidates_cache(tmp_path, builds):
@@ -46,7 +46,7 @@ def test_changed_file_invalidates_cache(tmp_path, builds):
     src.write_text(src.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     Corpus.from_tanzil(src, require_complete=False, cache_dir=cache)
     assert len(builds) == 2
-    assert len(list(cache.glob("corpus-*.pkl"))) == 2
+    assert len(list(cache.glob("corpus-*.sqlite"))) == 2
 
 
 def test_uthmani_file_is_part_of_the_key(tmp_path, builds):
@@ -58,7 +58,7 @@ def test_uthmani_file_is_part_of_the_key(tmp_path, builds):
 
 def test_corrupt_cache_file_is_rebuilt(tmp_path, builds):
     Corpus.from_tanzil(FIXTURE, require_complete=False, cache_dir=tmp_path)
-    [cached] = tmp_path.glob("corpus-*.pkl")
+    [cached] = tmp_path.glob("corpus-*.sqlite")
     cached.write_bytes(b"not a pickle")
     corpus = Corpus.from_tanzil(FIXTURE, require_complete=False, cache_dir=tmp_path)
     assert len(builds) == 2

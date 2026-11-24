@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from quran_detector import BALANCED, HIGH_PRECISION, Corpus, QuranDetector  # noqa: E402
+from quran_detector.tanzil import default_data_dir  # noqa: E402
 
 HEADER = re.compile(r"^Book ID:\s*(\d+)\s*$", re.M)
 NAME = re.compile(r"^Book Name:\s*(.+?)\s*$", re.M)
@@ -37,7 +38,7 @@ def book_text(raw: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--books", required=True, type=Path)
-    ap.add_argument("--simple", type=Path, default=ROOT / "data" / "quran-simple.txt")
+    ap.add_argument("--simple", type=Path, default=default_data_dir() / "quran-simple.txt")
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--start", type=int, default=0, help="skip the first N book files (sorted)")

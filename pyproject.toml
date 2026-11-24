@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quran-detector"
-version = "0.4.0"
+version = "0.5.0"
 description = "Detect, ground and verify Quran quotes in Arabic text"
 requires-python = ">=3.10"
 dependencies = []

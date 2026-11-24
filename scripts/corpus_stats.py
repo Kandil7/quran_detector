@@ -17,11 +17,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from quran_detector import Config, Corpus  # noqa: E402
+from quran_detector.tanzil import default_data_dir  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    path = Path(argv[0]) if argv else ROOT / "data" / "quran-simple.txt"
+    path = Path(argv[0]) if argv else default_data_dir() / "quran-simple.txt"
     if not path.exists():
         print(
             f"STOP: {path} not found. Download the Tanzil Simple text from https://tanzil.net/download/",

@@ -37,6 +37,7 @@ if __package__ in (None, ""):
 
 from quran_detector import BALANCED, Corpus, QuranDetector  # noqa: E402
 from quran_detector.normalizer import Level, normalize  # noqa: E402
+from quran_detector.tanzil import default_data_dir  # noqa: E402
 
 HEADER = re.compile(r"^(Book ID|Book Name):.*$", re.M)
 PAGE = re.compile(r"^\[Page \d+\]\s*$", re.M)
@@ -354,7 +355,7 @@ def build_doc(corpus, filler: Filler, rng: random.Random, doc_id: str, n_quotes:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--simple", type=Path, default=ROOT / "data" / "quran-simple.txt")
+    ap.add_argument("--simple", type=Path, default=default_data_dir() / "quran-simple.txt")
     ap.add_argument("--books", type=Path, required=True)
     ap.add_argument("--split", choices=["dev", "test"], required=True)
     ap.add_argument("--n", type=int, default=400)

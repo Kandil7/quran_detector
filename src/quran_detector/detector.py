@@ -23,6 +23,7 @@ from dataclasses import dataclass, replace
 from .citations import find_citation
 from .corpus import Corpus
 from .diacritics import compare as compare_diacritics
+from .metadata import QuranMetadata
 from .models import DetectionResult, DiffOp, QuranMatch, Ref, Status
 from .normalizer import Level, normalize_phrase
 from .ocr import resolve_ocr
@@ -136,9 +137,16 @@ class _Region:
 
 
 class QuranDetector:
-    def __init__(self, corpus: Corpus, config: Config = HIGH_PRECISION):
+    def __init__(
+        self,
+        corpus: Corpus,
+        config: Config = HIGH_PRECISION,
+        metadata: QuranMetadata | None = None,
+    ):
         self.corpus = corpus
         self.cfg = config
+        # Metadata only describes locations in the output. It never affects matching.
+        self.metadata = metadata
 
     # ================================================================ public
     def detect(self, text: str, assume_quote: bool = False) -> DetectionResult:
@@ -168,7 +176,10 @@ class QuranDetector:
             matches = [matches[i] for i in keep]
             for m in matches:
                 m.spliced_with = [remap[j] for j in m.spliced_with if j in remap]
-        return DetectionResult(text, matches, self.corpus.source)
+        source = dict(self.corpus.source)
+        if self.metadata is not None and self.metadata.file_sha256:
+            source["metadata_sha256"] = self.metadata.file_sha256
+        return DetectionResult(text, matches, source)
 
     def verify(self, quote: str) -> QuranMatch | None:
         """Check a string the caller asserts is a Quran quote.
@@ -514,6 +525,7 @@ class QuranDetector:
             citation_correct=cit_ok,
             diacritics_ok=dia_ok,
             script=script,
+            location_meta=([self.metadata.location_meta(loc) for loc in locations] if self.metadata else []),
         )
 
     def _expected_word(self, uth: bool, pp: int) -> str:

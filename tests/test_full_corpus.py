@@ -211,3 +211,18 @@ def test_final_yeh_written_as_alef_is_verified_only_with_the_flag(corpus):
     [m] = [m for m in on if m.end_char == len(text.rstrip())]
     assert m.status is Status.VERIFIED
     assert [d.op for d in m.diff] == ["variant"]
+
+
+@needs_uthmani
+def test_store_gives_identical_detections_on_sampled_ayahs(tmp_path):
+    fresh = QuranDetector(Corpus.from_tanzil(SIMPLE, UTHMANI))
+    Corpus.from_tanzil(SIMPLE, UTHMANI, cache_dir=tmp_path)  # write the store
+    loaded = QuranDetector(Corpus.from_tanzil(SIMPLE, UTHMANI, cache_dir=tmp_path))
+    fresh_all = fresh.corpus.ayahs
+    for idx, ay in enumerate(fresh_all):
+        if idx % 200:
+            continue
+        text = "قال تعالى: ﴿" + ay.simple_text + "﴾"
+        a = [(m.start_char, m.end_char, m.status, m.locations) for m in fresh.detect(text).matches]
+        b = [(m.start_char, m.end_char, m.status, m.locations) for m in loaded.detect(text).matches]
+        assert a == b, (ay.surah, ay.ayah)
