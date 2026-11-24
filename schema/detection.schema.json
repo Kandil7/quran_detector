@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "3"
+      "const": "4"
     },
     "matches": {
       "type": "array",
@@ -167,7 +167,8 @@
             "ambiguous",
             "altered",
             "spliced",
-            "candidate"
+            "candidate",
+            "needs_review"
           ]
         },
         "locations": {

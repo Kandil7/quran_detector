@@ -74,6 +74,7 @@ def load_gold(path: str | Path) -> list[Doc]:
                         status=s["status"],
                         locations=_locations(s.get("locations", []), sw),
                         intended=bool(s.get("intended", True)),
+                        kind=str(s.get("kind", "")),
                     )
                 )
             docs.append(Doc(obj["id"], text, obj["source"], spans))

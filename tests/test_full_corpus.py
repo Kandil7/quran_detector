@@ -184,3 +184,30 @@ def test_20_94_uses_the_correct_one_to_three_split(corpus, det):
     [m] = det.detect("قال تعالى: ﴿" + ay.uthmani_text + "﴾").matches
     assert m.status is Status.VERIFIED and m.script == "uthmani"
     assert all(not s.startswith("20:94") for s in corpus.uthmani_suspicious)
+
+
+# ------------------------------------------------------- variants (variants.py)
+def test_final_yeh_written_as_alef_is_verified_only_with_the_flag(corpus):
+    from quran_detector import Level, normalize
+
+    # a verse of at least 5 words whose last word ends in yeh (STRICT)
+    ay = next(
+        a
+        for a in corpus.ayahs
+        if len(a.simple_text.split()) >= 5
+        and normalize(a.simple_text.split()[-1], Level.STRICT).endswith("ي")
+    )
+    words = ay.simple_text.split()
+    w = words[-1]
+    k = max(j for j, ch in enumerate(w) if ch in "يى")  # yeh or alef maqsura ending the word
+    words[-1] = w[:k] + "ا" + w[k + 1 :]  # ... becomes an alef
+    text = " ".join(words)
+
+    off = QuranDetector(corpus, Config()).detect(text).matches
+    # without the flag, no verified match covers the altered last word (the prefix still verifies)
+    assert not any(m.status is Status.VERIFIED and m.end_char == len(text.rstrip()) for m in off)
+
+    on = QuranDetector(corpus, Config(orth_variants=True)).detect(text).matches
+    [m] = [m for m in on if m.end_char == len(text.rstrip())]
+    assert m.status is Status.VERIFIED
+    assert [d.op for d in m.diff] == ["variant"]

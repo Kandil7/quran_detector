@@ -25,9 +25,11 @@ from .corpus import Corpus
 from .diacritics import compare as compare_diacritics
 from .models import DetectionResult, DiffOp, QuranMatch, Ref, Status
 from .normalizer import Level, normalize_phrase
+from .ocr import resolve_ocr
 from .rules import apply_token_rules
 from .tokenizer import BARRIER, Token, tokenize
 from .uthmani import resolve_tokens
+from .variants import orth_variant
 
 UNKNOWN = -1
 BARRIER_ID = -3
@@ -98,11 +100,23 @@ class Config:
     diacritics: str = "off"
     # Token rules for LLM/OCR text (see rules.py). Each is independent, default off.
     uthmani: bool = True  # resolve Uthmani spellings when the corpus has an Uthmani file
+    # Quotation context markers (e.g. «قال تعالى») count only in the last 6 words of the
+    # same sentence. Off by default until evaluated (see evaluation/run_eval.py).
+    strict_context: bool = False
+    # "exact": the default. "ocr": words without an exact match are corrected to the
+    # nearest Quran word (see ocr.py) and matches that use one are `needs_review`.
+    mode: str = "exact"
+    ocr_max_edits: float = 2.0
+    # Narrow orthographic variants count as `variant` (not an edit), see variants.py.
+    # Off until evaluated: a variant does not block `verified`.
+    orth_variants: bool = False
     join_conjunctions: bool = False  # «و الله» → «والله»
     join_lam: bool = False  # «ل الله» → «لله»
     split_merged: bool = False  # «ياأيها» → «يا أيها»
 
     def __post_init__(self) -> None:
+        if self.mode not in ("exact", "ocr"):
+            raise ValueError(f"mode must be 'exact' or 'ocr', got {self.mode!r}")
         if self.diacritics not in ("off", "report", "strict"):
             raise ValueError(f"diacritics must be 'off', 'report' or 'strict', got {self.diacritics!r}")
 
@@ -131,6 +145,8 @@ class QuranDetector:
         tokens = apply_token_rules(text, tokenize(text), self.corpus, self.cfg)
         if self.cfg.uthmani and self.corpus.has_uthmani:
             tokens = resolve_tokens(tokens, self.corpus)
+        if self.cfg.mode == "ocr":
+            tokens = resolve_ocr(tokens, self.corpus, self.cfg.ocr_max_edits)
         ids = [BARRIER_ID if t.kind == BARRIER else self.corpus.word_id(t.strict) for t in tokens]
         mems = self._find_mems(ids)
         regions = self._chain(mems, tokens)
@@ -278,7 +294,9 @@ class QuranDetector:
         wid = c.stream[pos]
         if wid < 0 or tok.kind == BARRIER:
             return False
-        return ids_i == wid or tok.aggressive == c.vocab_aggressive[wid]
+        if ids_i == wid or tok.aggressive == c.vocab_aggressive[wid]:
+            return True
+        return self.cfg.orth_variants and orth_variant(tok.strict, c.vocab_strict[wid])
 
     def _extend_variants(self, reg: _Region, ids: list[int], tokens: list[Token]) -> _Region:
         c = self.corpus
@@ -357,6 +375,10 @@ class QuranDetector:
                 return True
         if b.endswith("﴿") or a.startswith("﴾"):
             return True
+        if self.cfg.strict_context:
+            # only the last few words of the same sentence can introduce a quote
+            sentence = re.split(r"[.!?\xd8\x9f\n]", before)[-1]
+            before = " ".join(sentence.split()[-6:])
         before_n = normalize_phrase(re.sub(r"[^\w\s]", " ", before), Level.AGGRESSIVE)
         return any(mk in before_n for mk in _CONTEXT_MARKERS)
 
@@ -442,6 +464,14 @@ class QuranDetector:
             dia_diff, dia_ok = self._diacritic_check(tokens, ops, uth)
             if cfg.diacritics == "strict" and dia_diff and status is Status.VERIFIED:
                 status = Status.ALTERED
+
+        # OCR-corrected words: a match that uses one is never verified
+        if any(tokens[i].ocr for i in range(reg.s, reg.e)) and status in (
+            Status.VERIFIED,
+            Status.AMBIGUOUS,
+            Status.ALTERED,
+        ):
+            status = Status.NEEDS_REVIEW
 
         sp, ep = loc_ranges[0]
         diff = []
@@ -539,5 +569,5 @@ class QuranDetector:
                 continue
             for a, b in ((m1, k + 1), (m2, k)):
                 a.spliced_with.append(b)
-                if a.status is not Status.CANDIDATE:
+                if a.status not in (Status.CANDIDATE, Status.NEEDS_REVIEW):
                     a.status = Status.SPLICED

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 from .stats import clopper_pearson_upper
 
-POSITIVE_STATUSES = {"verified", "ambiguous", "altered", "spliced"}
+POSITIVE_STATUSES = {"verified", "ambiguous", "altered", "spliced", "needs_review"}
 IOU_THRESHOLD = 0.5
 
 
@@ -30,6 +30,8 @@ class Span:
     status: str
     locations: tuple  # tuple of locations; a location is a tuple of ref tuples
     intended: bool = True
+    kind: str = ""  # perturbation kind (synthetic gold), "" for predictions
+    words: int = 0  # word count (predictions), for length breakdowns
 
 
 @dataclass
@@ -72,6 +74,8 @@ def match_spans(gold: list[Span], pred: list[Span], exact: bool) -> list[tuple[i
     cands = []
     for gi, g in enumerate(gold):
         for pi, p in enumerate(pred):
+            if g.doc_id != p.doc_id:
+                continue  # offsets only mean something inside one document
             if exact:
                 if (g.start, g.end) == (p.start, p.end):
                     cands.append((1.0, gi, pi))
@@ -193,18 +197,78 @@ def ambiguity_coverage(gold: list[Span], pred: list[Span]) -> dict:
     }
 
 
-def verified_precision(gold: list[Span], pred: list[Span], confidence: float = 0.95) -> dict:
+def recall_by_kind(gold: list[Span], pred: list[Span]) -> dict[str, dict]:
+    """Span recall (IoU >= 0.5, any non-candidate prediction) for each gold kind."""
+    out: dict[str, dict] = {}
+    gold_i = [g for g in gold if g.intended and g.kind]
+    for kind in sorted({g.kind for g in gold_i}):
+        gk = [g for g in gold_i if g.kind == kind]
+        tp = len(match_spans(gk, pred, exact=False))
+        out[kind] = {"n_gold": len(gk), "tp": tp, "recall": _ratio(tp, len(gk))}
+    return out
+
+
+def _word_set(locations) -> set[tuple[int, int, int]]:
+    """(surah, ayah, word) triples covered by a list of locations."""
+    out: set[tuple[int, int, int]] = set()
+    for loc in locations:
+        for r in loc:
+            s, a, w1, w2 = r[0], r[1], r[2], r[3]
+            out.update((s, a, w) for w in range(w1, w2 + 1))
+    return out
+
+
+def _grounded(pred_locations, gold_locations) -> bool:
+    """A prediction is grounded when its words lie inside one gold location.
+
+    A fragment of a gold quote (for example what remains after a merged word) is
+    exact Quran text at the right place, so it is correct. Words outside every gold
+    location are not.
+    """
+    pw = _word_set(pred_locations)
+    if not pw:
+        return False
+    return any(pw <= _word_set([loc]) for loc in gold_locations)
+
+
+def verified_precision(
+    gold: list[Span],
+    pred: list[Span],
+    confidence: float = 0.95,
+    min_words: int = 0,
+    max_words: int | None = None,
+) -> dict:
     """Precision of predicted `verified` matches, with a Clopper–Pearson error bound.
 
     A verified prediction is correct when it matches (IoU >= 0.5) an intended gold
     span and its single location is one of the gold locations of that span.
+
+    A verified prediction that lies inside an intended *altered* gold span is exact
+    Quran text inside a damaged quote. It is neither counted as correct nor as an
+    error, and is reported as `inside_altered`.
     """
     gold_i = [g for g in gold if g.intended]
-    ver = [p for p in pred if p.status == "verified"]
+    altered = [g for g in gold_i if g.status == "altered"]
+    ver_all = [
+        p
+        for p in pred
+        if p.status == "verified" and p.words >= min_words and (max_words is None or p.words <= max_words)
+    ]
+    ver = []
+    inside = 0
+    for p in ver_all:
+        plen = max(p.end - p.start, 1)
+        inside_alt = any(
+            g.doc_id == p.doc_id and min(p.end, g.end) - max(p.start, g.start) >= 0.8 * plen for g in altered
+        )
+        if inside_alt:
+            inside += 1
+        else:
+            ver.append(p)
     correct = 0
     for gi, vi in match_spans(gold_i, ver, exact=False):
         p = ver[vi]
-        if p.locations and p.locations[0] in set(gold_i[gi].locations):
+        if _grounded(p.locations, gold_i[gi].locations):
             correct += 1
     n = len(ver)
     errors = n - correct
@@ -212,6 +276,7 @@ def verified_precision(gold: list[Span], pred: list[Span], confidence: float = 0
         "n_verified": n,
         "correct": correct,
         "errors": errors,
+        "inside_altered": inside,
         "precision": _ratio(correct, n),
         "error_rate_upper_bound": clopper_pearson_upper(errors, n, confidence) if n else None,
         "confidence": confidence,

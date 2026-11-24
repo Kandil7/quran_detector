@@ -9,6 +9,7 @@ from evaluation.gold import GoldFormatError, load_gold
 from evaluation.metrics import (
     Doc,
     Span,
+    _grounded,
     ambiguity_coverage,
     char_macro_f1,
     document_false_positives,
@@ -17,6 +18,9 @@ from evaluation.metrics import (
     span_prf,
     status_prf,
     verified_precision,
+)
+from evaluation.metrics import (
+    verified_precision as _vp,
 )
 from evaluation.run_eval import evaluate, predict
 from evaluation.stats import betainc, clopper_pearson_upper
@@ -217,3 +221,41 @@ def test_end_to_end_perfect_detector_on_fixture(tmp_path):
     assert m["negatives"]["false_positive_docs"] == 0
     assert m["latency_ms"]["n"] == 2
     assert not math.isnan(m["latency_ms"]["p50"])
+
+
+# ------------------------------------------- grounding and document scope (today's fixes)
+def _loc(*refs):
+    return tuple(refs)
+
+
+def test_fragment_of_a_gold_location_is_grounded():
+    gold = [_loc((2, 153, 1, 11))]
+    assert _grounded([_loc((2, 153, 4, 9))], gold)  # a fragment inside the quote
+
+
+def test_words_outside_every_gold_location_are_not_grounded():
+    gold = [_loc((2, 153, 1, 11))]
+    assert not _grounded([_loc((2, 153, 9, 14))], gold)  # runs past the quote
+    assert not _grounded([_loc((8, 46, 1, 4))], gold)  # another verse
+
+
+def test_matching_never_crosses_documents():
+    # identical offsets in two documents must not match each other
+    g = Span("d1", 0, 10, "verified", (_loc((1, 1, 1, 4)),), True)
+    p = Span("d2", 0, 10, "verified", (_loc((1, 1, 1, 4)),), True)
+    assert span_prf([g], [p], exact=False)["tp"] == 0
+
+
+def test_verified_prediction_inside_altered_gold_is_excluded_not_counted():
+    alt = Span("d", 0, 40, "altered", (_loc((2, 153, 1, 11)),), True)
+    inner = Span("d", 2, 30, "verified", (_loc((2, 153, 1, 5)),), True, words=5)
+    r = _vp([alt], [inner])
+    assert r["inside_altered"] == 1 and r["n_verified"] == 0 and r["errors"] == 0
+
+
+def test_word_count_buckets_filter_predictions():
+    g = Span("d", 0, 10, "verified", (_loc((1, 1, 1, 4)),), True)
+    short = Span("d", 0, 10, "verified", (_loc((1, 1, 1, 4)),), True, words=2)
+    long_ = Span("d", 0, 10, "verified", (_loc((1, 1, 1, 4)),), True, words=8)
+    assert _vp([g], [short], max_words=3)["n_verified"] == 1
+    assert _vp([g], [long_], max_words=3)["n_verified"] == 0

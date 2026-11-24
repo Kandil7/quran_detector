@@ -8,3 +8,6 @@ evaluation/reports/
 data/
 .mypy_cache/
 .ruff_cache/
+
+# Synthetic evaluation data: contains book text (copyright) and Tanzil quotes
+evaluation/data/

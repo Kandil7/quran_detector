@@ -28,7 +28,7 @@ SURAH_BREAK = -2
 TOTAL_AYAHS = 6236
 TOTAL_SURAHS = 114
 # Bump when the layout of Corpus changes, so old cache files are ignored.
-CACHE_VERSION = 5
+CACHE_VERSION = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +83,7 @@ class Corpus:
         self.source = source or {}
         self.vocab: dict[str, int] = {}
         self.vocab_aggressive: list[str] = []
+        self.vocab_strict: list[str] = []
         self.stream = array("i")
         self.raw_words: list[str] = []  # original (diacritized) word per position
         self.pos_ayah = array("i")  # ayah index per position, -1 for sentinel
@@ -207,6 +208,7 @@ class Corpus:
             i = len(self.vocab_aggressive)
             self.vocab[strict] = i
             self.vocab_aggressive.append(aggressive)
+            self.vocab_strict.append(strict)
         return i
 
     def _push(self, wid: int, raw: str, ayah_idx: int, word_idx: int) -> None:

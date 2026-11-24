@@ -52,6 +52,7 @@ python -m quran_detector --simple data/quran-simple.txt verify "قل هو الل
 | `altered` | clearly intended quote with substituted, inserted or missing words; see `diff` |
 | `spliced` | joined directly to another quote from a non-adjacent place; see `spliced_with` |
 | `candidate` | real Quran words but too short or too common (e.g. «إن شاء الله»). Hidden in `HIGH_PRECISION`, shown in `BALANCED` |
+| `needs_review` | OCR mode only: a match that uses a corrected word. Never `verified`. |
 
 Every match also has `start_char`/`end_char` (Python string indices),
 `reference_text` (Tanzil Simple words), `reference_uthmani` (whole ayahs) and
@@ -88,6 +89,11 @@ spelling `variant`.
 | `join_lam` | `False` | joins «ل الله» to «لله» |
 | `split_merged` | `False` | splits an unknown merged word into two Quran-attested words («ياأيها» → «يا أيها») |
 | `include_candidates` | `False` | also return `candidate` matches (`BALANCED` preset) |
+| `strict_context` | `False` | a quotation marker («قال تعالى») counts only in the last 6 words of the same sentence. Dev: removes the short false positives; costs about 0.2% span recall. |
+| `orth_variants` | `False` | three narrow spelling variants count as `variant`, not an edit: a missing alef beside a hamza («مئة» / «مائة»), a final alef for ى, and one hamza letter for another. Dev: +14 correct verified matches, no new errors. |
+| `join_conjunctions` | `False` | (token rule) see above; dev: +5 correct verified, no errors |
+| `split_merged` | `False` | (token rule) dev: merge recall 0.45 → 0.75, no precision loss |
+| `mode` | `"exact"` | `"ocr"`: unknown words are corrected to the nearest Quran word within `ocr_max_edits` (dot confusions cost 0.5). Matches that use a correction are `needs_review`, never `verified`. Slower: about 0.5 s per 300-word text. |
 | `uthmani` | `True` | when an Uthmani file was loaded, words written in Uthmani spelling are resolved to the Simple words they correspond to; the match then reports `script: "uthmani"` and the matched Uthmani words in `reference_uthmani` |
 
 The three token rules are off by default because their effect on `verified`
@@ -97,10 +103,11 @@ without any option.
 
 ## Output
 
-`DetectionResult.to_dict()` carries `"schema_version": "3"` and validates
+`DetectionResult.to_dict()` carries `"schema_version": "4"` and validates
 against [`schema/detection.schema.json`](schema/detection.schema.json).
 Version 2 added `diacritics_ok`, the `diacritic` diff operation and its
-`letter_index`. Version 3 adds `script` (`"simple"` or `"uthmani"`).
+`letter_index`. Version 3 added `script` (`"simple"` or `"uthmani"`). Version 4 adds
+the `needs_review` status.
 
 CLI:
 
@@ -129,6 +136,25 @@ The package is typed (`py.typed`).
 
 `evaluation/` is not part of the core and needs no extra dependencies.
 
+Synthetic data (`evaluation/synth.py`): quotes sampled from the Tanzil text,
+perturbed (diacritics, spelling, orthographic variants, detached or merged words,
+substitutions, insertions, deletions, splices, ayah numbers), and embedded in
+filler from real books that contain no Quran text. Books are split into dev and
+test by a hash of the file name. Generated files go to `evaluation/data/`, which is
+git-ignored because they contain book text.
+
+```bash
+python evaluation/synth.py --books "<books folder>" --split dev  --out evaluation/data/synth_dev.jsonl
+python evaluation/synth.py --books "<books folder>" --split test --out evaluation/data/synth_test.jsonl
+python evaluation/run_eval.py --data evaluation/data/synth_dev.jsonl --set orth_variants=true
+python evaluation/tune.py --data evaluation/data/synth_dev.jsonl --out evaluation/reports/tune_dev.jsonl
+```
+
+`tune.py` refuses test files. Metric conventions: a prediction matches a gold span
+only in the same document; a verified prediction is correct when its words lie
+inside a gold location (a fragment of a quote is correct); a verified prediction
+inside an altered quote is reported separately as `inside_altered`.
+
 ```bash
 python evaluation/run_eval.py --simple data/quran-simple.txt --data evaluation/data/dev.jsonl
 python evaluation/run_eval.py ... --compare evaluation/reports/OLD.json
@@ -150,9 +176,13 @@ error rate. Undefined ratios are reported as `n/a`, not as 0 or 1.
   `evaluation/reports/uthmani_alignment.txt`.
 - The alignment and dictionary are built when the corpus is loaded (about 8 s
   cold, cached with `cache_dir`).
-- **OCR / ASR**: no fuzzy candidate generation yet. `Level.SKELETON` (dot-confusion
-  classes) exists; the candidate index and the `needs_review` status do not.
-- The token rules above are implemented but not yet evaluated.
+- **OCR**: `mode="ocr"` corrects single words and splits merged ones. It does not
+  yet handle a word split into two wrong pieces, and it is not tuned on real scans.
+- Synthetic evaluation is the only accuracy measure so far. It has 253 verified
+  matches on dev, so the 95% error bound on precision stays above 1% (about 3%).
+  A 1% bound needs several thousand matches.
+- Gold labels for quotes of 4 words or fewer without context follow the gate
+  (not intended); this policy should be confirmed before comparing to other systems.
 - Thresholds in `Config` are defaults, not tuned on real data. Tune them on a
   labelled evaluation set (e.g. IslamicEval 2025 Task 1) before relying on the
   numbers.

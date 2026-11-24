@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from evaluation.metrics import (  # noqa: E402
     char_macro_f1,
     document_false_positives,
     latency_ms,
+    recall_by_kind,
     reference_accuracy,
     span_prf,
     status_prf,
@@ -38,6 +40,25 @@ from evaluation.metrics import (  # noqa: E402
 from quran_detector import BALANCED, HIGH_PRECISION, Corpus, QuranDetector  # noqa: E402
 
 REPORT_DIR = Path(__file__).resolve().parent / "reports"
+
+
+def parse_overrides(pairs: list[str]) -> dict:
+    """Parse NAME=VALUE pairs into Config keyword arguments (bool, int, float or str)."""
+    out: dict = {}
+    for pair in pairs:
+        name, _, raw = pair.partition("=")
+        if raw.lower() in ("true", "false"):
+            val: object = raw.lower() == "true"
+        else:
+            try:
+                val = int(raw)
+            except ValueError:
+                try:
+                    val = float(raw)
+                except ValueError:
+                    val = raw
+        out[name.strip()] = val
+    return out
 
 
 def predict(det: QuranDetector, docs: list[Doc]) -> tuple[dict[str, list[Span]], list[float]]:
@@ -53,6 +74,7 @@ def predict(det: QuranDetector, docs: list[Doc]) -> tuple[dict[str, list[Span]],
                 start=m.start_char,
                 end=m.end_char,
                 status=m.status.value,
+                words=m.word_count,
                 locations=tuple(
                     tuple((r.surah, r.ayah, r.word_start, r.word_end) for r in loc) for loc in m.locations
                 ),
@@ -78,6 +100,12 @@ def evaluate(docs: list[Doc], preds: dict[str, list[Span]], times: list[float]) 
         "altered": status_prf(gold, pred, "altered"),
         "spliced": status_prf(gold, pred, "spliced"),
         "verified_precision": verified_precision(gold, pred),
+        "verified_precision_by_length": {
+            "words_le_3": verified_precision(gold, pred, max_words=3),
+            "words_4_5": verified_precision(gold, pred, min_words=4, max_words=5),
+            "words_ge_6": verified_precision(gold, pred, min_words=6),
+        },
+        "recall_by_kind": recall_by_kind(gold, pred),
         "negatives": per_doc_fp,
         "latency_ms": latency_ms(times),
     }
@@ -138,11 +166,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-dir", type=Path, default=REPORT_DIR)
     ap.add_argument("--compare", type=Path, help="earlier report .json to compare with")
     ap.add_argument("--allow-partial-corpus", action="store_true")
+    ap.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="override a Config field for this run, e.g. --set strict_context=true (repeatable)",
+    )
     args = ap.parse_args(argv)
 
     docs = load_gold(args.data)
     corpus = Corpus.from_tanzil(args.simple, args.uthmani, require_complete=not args.allow_partial_corpus)
-    det = QuranDetector(corpus, HIGH_PRECISION if args.mode == "high_precision" else BALANCED)
+    base = HIGH_PRECISION if args.mode == "high_precision" else BALANCED
+    cfg = replace(base, **parse_overrides(args.set))
+    det = QuranDetector(corpus, cfg)
     preds, times = predict(det, docs)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -150,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         "timestamp": stamp,
         "data": str(args.data),
         "mode": args.mode,
+        "overrides": parse_overrides(args.set),
         "corpus": corpus.source,
         "metrics": evaluate(docs, preds, times),
     }

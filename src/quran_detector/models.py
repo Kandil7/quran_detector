@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any
 
 # Version of the to_dict() output layout. Bump when a field is added, removed or renamed.
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 
 class Status(str, Enum):
@@ -14,6 +14,7 @@ class Status(str, Enum):
     ALTERED = "altered"  # clearly intended quote with word-level differences
     SPLICED = "spliced"  # directly joined to another quote from a non-adjacent place
     CANDIDATE = "candidate"  # real Quran words, but too short/common to call a quote
+    NEEDS_REVIEW = "needs_review"  # OCR mode: a match that used corrected words; never verified
 
 
 @dataclass(frozen=True)

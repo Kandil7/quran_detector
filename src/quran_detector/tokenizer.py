@@ -34,6 +34,7 @@ class Token:
     aggressive: str
     kind: int
     uthmani: bool = False  # True when this word was resolved from Uthmani spelling
+    ocr: bool = False  # True when this word was corrected in OCR mode
 
 
 def tokenize(text: str) -> list[Token]:
