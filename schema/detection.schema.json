@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/quran-detector/schema/detection.schema.json",
+  "title": "quran-detector DetectionResult",
+  "description": "Output of QuranDetector.detect(...).to_dict(). Offsets are Python string indexes (code points).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "matches",
+    "source"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "3"
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/match"
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "Corpus provenance and the Tanzil attribution.",
+      "properties": {
+        "simple_file": {
+          "type": "string"
+        },
+        "simple_sha256": {
+          "type": "string"
+        },
+        "uthmani_file": {
+          "type": "string"
+        },
+        "uthmani_sha256": {
+          "type": "string"
+        },
+        "attribution": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": [
+        "surah",
+        "ayah",
+        "word_start",
+        "word_end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "surah": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 114
+        },
+        "ayah": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "word_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "word_end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diff_op": {
+      "type": "object",
+      "required": [
+        "op",
+        "got",
+        "expected",
+        "input_start",
+        "input_end",
+        "letter_index"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "enum": [
+            "variant",
+            "substitute",
+            "insert",
+            "delete",
+            "diacritic"
+          ]
+        },
+        "got": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expected": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_start": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_end": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "letter_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "required": [
+        "start_char",
+        "end_char",
+        "text",
+        "status",
+        "locations",
+        "word_count",
+        "matched_words",
+        "score",
+        "diff",
+        "reference_text",
+        "reference_uthmani",
+        "has_context",
+        "claimed_ref",
+        "citation_correct",
+        "spliced_with",
+        "diacritics_ok",
+        "script"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "start_char": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_char": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "ambiguous",
+            "altered",
+            "spliced",
+            "candidate"
+          ]
+        },
+        "locations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/ref"
+            }
+          }
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "matched_words": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0
+        },
+        "diff": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diff_op"
+          }
+        },
+        "reference_text": {
+          "type": "string"
+        },
+        "reference_uthmani": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "has_context": {
+          "type": "boolean"
+        },
+        "claimed_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "citation_correct": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "spliced_with": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "diacritics_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "script": {
+          "enum": [
+            "simple",
+            "uthmani"
+          ],
+          "description": "uthmani: reference_uthmani holds the matched Uthmani words"
+        }
+      }
+    }
+  }
+}

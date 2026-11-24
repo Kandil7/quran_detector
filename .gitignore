@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.cache/
+evaluation/reports/
+
+# Tanzil Quran text: verbatim copy is allowed, but do not commit it (see README, attribution)
+data/
+.mypy_cache/
+.ruff_cache/
