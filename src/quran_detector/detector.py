@@ -102,8 +102,9 @@ class Config:
     # Token rules for LLM/OCR text (see rules.py). Each is independent, default off.
     uthmani: bool = True  # resolve Uthmani spellings when the corpus has an Uthmani file
     # Quotation context markers (e.g. «قال تعالى») count only in the last 6 words of the
-    # same sentence. Off by default until evaluated (see evaluation/run_eval.py).
-    strict_context: bool = False
+    # same sentence. On by default: on the 3,000-document synthetic test set it removes
+    # verified false matches and false-match negative documents (see README, Evaluation).
+    strict_context: bool = True
     # "exact": the default. "ocr": words without an exact match are corrected to the
     # nearest Quran word (see ocr.py) and matches that use one are `needs_review`.
     mode: str = "exact"

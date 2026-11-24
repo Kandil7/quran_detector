@@ -10,7 +10,7 @@ answers and OCR output. For every quote the library returns:
 
 Pure Python 3.10+, no runtime dependencies. Typed (`py.typed`, `mypy --strict` clean).
 
-Version 0.5.0 · output schema 5 · 200 tests · see [Status](#status) for what is done and what is not.
+Version 0.6.0 · output schema 5 · 200 tests · see [Status](#status) for what is done and what is not.
 
 ---
 
@@ -341,7 +341,7 @@ All fields are in `quran_detector.Config`, a frozen dataclass. Defaults are the
 
 | field | default | meaning |
 |---|---|---|
-| `strict_context` | `False` | a quotation marker counts only if it is in the last 6 words of the same sentence. The sentence-local check removes false short matches (see [Evaluation](#evaluation)). **Recommended on; not yet the default, pending a decision.** |
+| `strict_context` | `True` | a quotation marker counts only if it is in the last 6 words of the same sentence. Removes false short matches; on the 3,000-document test set, 8 verified errors instead of 11, and no false-match negative documents (see [Evaluation](#evaluation)). Set to `False` to restore the earlier 40-character window. |
 | `orth_variants` | `False` | three narrow spelling variants count as `variant` instead of an edit: a missing alef beside a hamza (مئة / مائة), a final alef for ى (أقصا / أقصى), and one hamza-family letter for another (يسئل / يسأل). Words that differ in a middle weak letter (قول / قال) are not variants. |
 | `include_candidates` | `False` | also return `candidate` matches |
 
@@ -624,8 +624,9 @@ Run the benchmark: `python scripts/bench.py`.
 
 - `--min-status` (CLI) does not know `needs_review` and drops those matches. Decide
   where `needs_review` ranks, then add it to the CLI ordering.
-- A quotation marker counts within 40 characters in the default mode. This is why
-  `strict_context` is recommended (see [Evaluation](#evaluation)).
+- With `strict_context=False`, a quotation marker counts anywhere within 40 characters,
+  which can pick up a marker from the surrounding text. The default is now `True`, which
+  limits markers to the last 6 words of the same sentence (see [Evaluation](#evaluation)).
 - A damaged quote is usually reported as one `altered` match. Its exact halves are
   usually not reported as separate matches.
 - The Uthmani dictionary is built from the aligned Tanzil texts. Words not in the
@@ -657,7 +658,7 @@ Run the benchmark: `python scripts/bench.py`.
 | Core detector, citations, diacritics, Uthmani, token rules, OCR mode | implemented, tested |
 | Synthetic evaluation data and harness | implemented |
 | Threshold grid search on dev | done (648 configurations) |
-| Gate defaults | **open decision** (see [Evaluation](#evaluation)) |
+| Gate defaults | `strict_context=True` is the default since 0.6.0. The rule-selected alternative stays opt-in; its three false-match negative documents remain. |
 | IslamicEval adapter | blocked: dev files not in the project |
 | Neural intent tagger | not started; needs approval |
 | Packaging, CI, JSON Schema | implemented; CI workflow not run from this environment |
@@ -740,6 +741,7 @@ Conventions:
 | 0.2.0 | diacritics (`report`/`strict`), `diacritic` diff op, schema 2 |
 | 0.3.0 | Uthmani resolution with reviewed alignments, `script` field, schema 3 |
 | 0.4.0 | token rules, `strict_context`, `orth_variants`, OCR mode, `needs_review`, schema 4, synthetic evaluation, dev-only grid search, metric fixes |
+| 0.6.0 | `strict_context` is on by default (behaviour change). Large test set: 8 verified errors in 1,735 (was 11 in 1,754), bound 0.0083, no false-match negative documents. |
 | 0.5.0 | SQLite corpus store replaces the pickle cache (`CACHE_VERSION` 8); one validated Tanzil reader with order checks; optional metadata (`location_meta`, schema 5) from a validated Bayan-schema import; provenance checks (`verify_sources.py`); surah names verified against the metadata |
 
 ---
